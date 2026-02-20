@@ -2,20 +2,32 @@ const csvInput = document.getElementById('csvInput');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const downloadJsonBtn = document.getElementById('downloadJsonBtn');
 const statusEl = document.getElementById('status');
+const fileBadge = document.getElementById('fileBadge');
 const tableBody = document.querySelector('#ringTable tbody');
 const suspiciousList = document.getElementById('suspiciousList');
+
+const totalAccountsEl = document.getElementById('totalAccounts');
+const suspiciousCountEl = document.getElementById('suspiciousCount');
+const ringCountEl = document.getElementById('ringCount');
+const processingTimeEl = document.getElementById('processingTime');
 
 let parsedTransactions = [];
 let lastResult = null;
 
 csvInput.addEventListener('change', () => {
-  analyzeBtn.disabled = !csvInput.files.length;
+  const hasFile = csvInput.files.length > 0;
+  analyzeBtn.disabled = !hasFile;
   downloadJsonBtn.disabled = true;
-  statusEl.textContent = csvInput.files.length ? 'CSV loaded. Ready to analyze.' : 'Upload a CSV file.';
+  fileBadge.textContent = hasFile ? csvInput.files[0].name : 'No file selected';
+  statusEl.textContent = hasFile ? 'Dataset loaded. Click analyze to run all detection passes.' : 'Awaiting dataset upload.';
 });
 
 analyzeBtn.addEventListener('click', () => {
   if (!csvInput.files.length) return;
+
+  statusEl.style.color = '#93c5fd';
+  statusEl.textContent = 'Analyzing graph patterns...';
+  analyzeBtn.disabled = true;
 
   const file = csvInput.files[0];
   Papa.parse(file, {
@@ -23,22 +35,31 @@ analyzeBtn.addEventListener('click', () => {
     skipEmptyLines: true,
     complete: ({ data, errors }) => {
       if (errors.length) {
+        statusEl.style.color = '#fca5a5';
         statusEl.textContent = `CSV parsing error: ${errors[0].message}`;
+        analyzeBtn.disabled = false;
         return;
       }
+
       try {
         const start = performance.now();
         parsedTransactions = normalizeTransactions(data);
         const result = detectPatterns(parsedTransactions, start);
         lastResult = result;
+
         drawGraph(parsedTransactions, result);
         renderRings(result.fraud_rings);
         renderSuspicious(result.suspicious_accounts);
+        renderSummary(result.summary);
+
         downloadJsonBtn.disabled = false;
+        statusEl.style.color = '#86efac';
         statusEl.textContent = `Analysis complete. ${result.summary.suspicious_accounts_flagged} suspicious accounts flagged across ${result.summary.fraud_rings_detected} rings.`;
       } catch (error) {
+        statusEl.style.color = '#fca5a5';
         statusEl.textContent = `Analysis failed: ${error.message}`;
       }
+      analyzeBtn.disabled = false;
     }
   });
 });
@@ -54,16 +75,19 @@ downloadJsonBtn.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
+function renderSummary(summary) {
+  totalAccountsEl.textContent = summary.total_accounts_analyzed;
+  suspiciousCountEl.textContent = summary.suspicious_accounts_flagged;
+  ringCountEl.textContent = summary.fraud_rings_detected;
+  processingTimeEl.textContent = `${summary.processing_time_seconds.toFixed(3)}s`;
+}
+
 function normalizeTransactions(rows) {
   const required = ['transaction_id', 'sender_id', 'receiver_id', 'amount', 'timestamp'];
-  if (!rows.length) {
-    throw new Error('No rows found.');
-  }
+  if (!rows.length) throw new Error('No rows found.');
 
   required.forEach((field) => {
-    if (!(field in rows[0])) {
-      throw new Error(`Missing required column: ${field}`);
-    }
+    if (!(field in rows[0])) throw new Error(`Missing required column: ${field}`);
   });
 
   return rows.map((row, idx) => {
@@ -86,11 +110,9 @@ function normalizeTransactions(rows) {
 function detectPatterns(transactions, start) {
   const accountStats = new Map();
   const graph = new Map();
-  const reverseGraph = new Map();
 
   transactions.forEach((tx) => {
     addSetMap(graph, tx.sender_id, tx.receiver_id);
-    addSetMap(reverseGraph, tx.receiver_id, tx.sender_id);
 
     if (!accountStats.has(tx.sender_id)) accountStats.set(tx.sender_id, { in: 0, out: 0, txCount: 0, totalIn: 0, totalOut: 0 });
     if (!accountStats.has(tx.receiver_id)) accountStats.set(tx.receiver_id, { in: 0, out: 0, txCount: 0, totalIn: 0, totalOut: 0 });
@@ -98,7 +120,6 @@ function detectPatterns(transactions, start) {
     accountStats.get(tx.sender_id).out += 1;
     accountStats.get(tx.sender_id).txCount += 1;
     accountStats.get(tx.sender_id).totalOut += tx.amount;
-
     accountStats.get(tx.receiver_id).in += 1;
     accountStats.get(tx.receiver_id).txCount += 1;
     accountStats.get(tx.receiver_id).totalIn += tx.amount;
@@ -107,28 +128,20 @@ function detectPatterns(transactions, start) {
   const rings = [];
   const accountPatterns = new Map();
 
-  const cycleRings = detectCycles(graph);
-  cycleRings.forEach((ring) => {
-    const ringId = `RING_${String(rings.length + 1).padStart(3, '0')}`;
-    rings.push({
-      ring_id: ringId,
-      member_accounts: [...ring],
-      pattern_type: 'cycle',
-      risk_score: scoreRing('cycle', ring.length, 1)
-    });
+  detectCycles(graph).forEach((ring) => {
+    const ringId = ringIdentifier(rings.length + 1);
+    rings.push({ ring_id: ringId, member_accounts: [...ring], pattern_type: 'cycle', risk_score: scoreRing('cycle', ring.length, 1) });
     ring.forEach((account) => addPattern(accountPatterns, account, `cycle_length_${ring.length}`, ringId));
   });
 
-  const smurfRings = detectSmurfing(transactions);
-  smurfRings.forEach((ring) => {
-    const ringId = `RING_${String(rings.length + 1).padStart(3, '0')}`;
+  detectSmurfing(transactions).forEach((ring) => {
+    const ringId = ringIdentifier(rings.length + 1);
     rings.push({ ...ring, ring_id: ringId });
     ring.member_accounts.forEach((account) => addPattern(accountPatterns, account, ring.pattern_type, ringId));
   });
 
-  const shellRings = detectShellChains(transactions, accountStats);
-  shellRings.forEach((ring) => {
-    const ringId = `RING_${String(rings.length + 1).padStart(3, '0')}`;
+  detectShellChains(transactions, accountStats).forEach((ring) => {
+    const ringId = ringIdentifier(rings.length + 1);
     rings.push({ ...ring, ring_id: ringId });
     ring.member_accounts.forEach((account) => addPattern(accountPatterns, account, 'layered_shell', ringId));
   });
@@ -137,19 +150,17 @@ function detectPatterns(transactions, start) {
     const stats = accountStats.get(account) || { in: 0, out: 0, totalIn: 0, totalOut: 0 };
     const base = entry.patterns.length * 22;
     const velocity = Math.min(20, (stats.in + stats.out) * 1.2);
-    const flowSkew = Math.min(18, Math.abs(stats.totalIn - stats.totalOut) / Math.max(1, stats.totalIn + stats.totalOut) * 40);
-    const suspicionScore = Number(Math.min(100, base + velocity + flowSkew).toFixed(1));
+    const flowSkew = Math.min(18, (Math.abs(stats.totalIn - stats.totalOut) / Math.max(1, stats.totalIn + stats.totalOut)) * 40);
 
     return {
       account_id: account,
-      suspicion_score: suspicionScore,
+      suspicion_score: Number(Math.min(100, base + velocity + flowSkew).toFixed(1)),
       detected_patterns: [...new Set(entry.patterns)],
       ring_id: entry.ring_id
     };
   }).sort((a, b) => b.suspicion_score - a.suspicion_score);
 
   const end = performance.now();
-
   return {
     suspicious_accounts: suspiciousAccounts,
     fraud_rings: rings,
@@ -163,16 +174,14 @@ function detectPatterns(transactions, start) {
 }
 
 function detectCycles(graph) {
-  const nodes = [...graph.keys()];
   const cycles = new Set();
+  const nodes = [...graph.keys()];
 
   const dfs = (start, current, path, visited) => {
     if (path.length > 5) return;
-
     for (const next of graph.get(current) || []) {
       if (next === start && path.length >= 3 && path.length <= 5) {
-        const normalized = normalizeCycle(path);
-        cycles.add(normalized.join('>'));
+        cycles.add(normalizeCycle(path).join('>'));
       } else if (!visited.has(next) && path.length < 5) {
         visited.add(next);
         path.push(next);
@@ -183,10 +192,7 @@ function detectCycles(graph) {
     }
   };
 
-  nodes.forEach((node) => {
-    dfs(node, node, [node], new Set([node]));
-  });
-
+  nodes.forEach((node) => dfs(node, node, [node], new Set([node])));
   return [...cycles].map((cycle) => cycle.split('>'));
 }
 
@@ -203,22 +209,14 @@ function detectSmurfing(transactions) {
   byReceiver.forEach((incoming, receiver) => {
     const uniqueSenders = new Set(incoming.map((tx) => tx.sender_id));
     if (uniqueSenders.size >= 10 && withinWindow(incoming, 72)) {
-      rings.push({
-        member_accounts: [...uniqueSenders, receiver],
-        pattern_type: 'fan_in',
-        risk_score: scoreRing('fan_in', uniqueSenders.size + 1, 1)
-      });
+      rings.push({ member_accounts: [...uniqueSenders, receiver], pattern_type: 'fan_in', risk_score: scoreRing('fan_in', uniqueSenders.size + 1, 1) });
     }
   });
 
   bySender.forEach((outgoing, sender) => {
     const uniqueReceivers = new Set(outgoing.map((tx) => tx.receiver_id));
     if (uniqueReceivers.size >= 10 && withinWindow(outgoing, 72)) {
-      rings.push({
-        member_accounts: [sender, ...uniqueReceivers],
-        pattern_type: 'fan_out',
-        risk_score: scoreRing('fan_out', uniqueReceivers.size + 1, 1)
-      });
+      rings.push({ member_accounts: [sender, ...uniqueReceivers], pattern_type: 'fan_out', risk_score: scoreRing('fan_out', uniqueReceivers.size + 1, 1) });
     }
   });
 
@@ -230,30 +228,19 @@ function detectShellChains(transactions, stats) {
   transactions.forEach((tx) => pushMap(outgoing, tx.sender_id, tx));
 
   const rings = [];
-
   for (const tx of transactions) {
-    const level2 = outgoing.get(tx.receiver_id) || [];
-    for (const tx2 of level2) {
-      const level3 = outgoing.get(tx2.receiver_id) || [];
-      for (const tx3 of level3) {
+    for (const tx2 of outgoing.get(tx.receiver_id) || []) {
+      for (const tx3 of outgoing.get(tx2.receiver_id) || []) {
         const chain = [tx.sender_id, tx.receiver_id, tx2.receiver_id, tx3.receiver_id];
         const intermediates = [tx.receiver_id, tx2.receiver_id];
         const isShellLike = intermediates.every((account) => {
-          const txCount = (stats.get(account)?.txCount || 0);
+          const txCount = stats.get(account)?.txCount || 0;
           return txCount >= 2 && txCount <= 3;
         });
-
-        if (isShellLike && chain.length >= 4) {
-          rings.push({
-            member_accounts: chain,
-            pattern_type: 'shell_chain',
-            risk_score: scoreRing('shell_chain', chain.length, 1)
-          });
-        }
+        if (isShellLike) rings.push({ member_accounts: chain, pattern_type: 'shell_chain', risk_score: scoreRing('shell_chain', chain.length, 1) });
       }
     }
   }
-
   return uniqueRings(rings);
 }
 
@@ -274,8 +261,9 @@ function renderRings(rings) {
 
 function renderSuspicious(accounts) {
   suspiciousList.innerHTML = '';
-  accounts.slice(0, 30).forEach((acc) => {
+  accounts.slice(0, 30).forEach((acc, idx) => {
     const li = document.createElement('li');
+    li.style.animationDelay = `${idx * 0.015}s`;
     li.textContent = `${acc.account_id} — score ${acc.suspicion_score} (${acc.detected_patterns.join(', ')})`;
     suspiciousList.appendChild(li);
   });
@@ -284,7 +272,7 @@ function renderSuspicious(accounts) {
 function drawGraph(transactions, result) {
   const container = document.getElementById('graph');
   const suspiciousSet = new Set(result.suspicious_accounts.map((a) => a.account_id));
-  const ringColor = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#a855f7'];
+  const ringColor = ['#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6'];
   const accountRing = new Map();
 
   result.fraud_rings.forEach((ring, idx) => {
@@ -309,6 +297,7 @@ function drawGraph(transactions, result) {
       background: accountRing.get(id) || (suspiciousSet.has(id) ? '#f59e0b' : '#60a5fa'),
       border: suspiciousSet.has(id) ? '#ef4444' : '#1e293b'
     },
+    font: { color: '#e2e8f0', strokeWidth: 0 },
     title: `<b>${id}</b><br/>Suspicious: ${suspiciousSet.has(id) ? 'Yes' : 'No'}`
   }));
 
@@ -318,14 +307,18 @@ function drawGraph(transactions, result) {
     arrows: 'to',
     label: `${tx.amount}`,
     font: { size: 9, color: '#cbd5e1' },
-    color: { color: '#64748b', opacity: 0.65 }
+    color: { color: '#64748b', opacity: 0.7 }
   }));
 
   new vis.Network(container, { nodes, edges }, {
-    physics: { stabilization: false, barnesHut: { springLength: 130 } },
+    physics: { stabilization: false, barnesHut: { springLength: 130, avoidOverlap: 0.7 } },
     interaction: { hover: true, zoomView: true, dragView: true },
     edges: { smooth: { type: 'dynamic' } }
   });
+}
+
+function ringIdentifier(n) {
+  return `RING_${String(n).padStart(3, '0')}`;
 }
 
 function addSetMap(map, key, value) {
@@ -354,20 +347,13 @@ function withinWindow(txs, hours) {
 }
 
 function scoreRing(type, size, density) {
-  const base = {
-    cycle: 80,
-    fan_in: 72,
-    fan_out: 72,
-    shell_chain: 76
-  }[type] || 65;
+  const base = { cycle: 80, fan_in: 72, fan_out: 72, shell_chain: 76 }[type] || 65;
   return Number(Math.min(99.9, base + size * 1.8 + density * 2).toFixed(1));
 }
 
 function normalizeCycle(path) {
   const variants = [];
-  for (let i = 0; i < path.length; i += 1) {
-    variants.push([...path.slice(i), ...path.slice(0, i)]);
-  }
+  for (let i = 0; i < path.length; i += 1) variants.push([...path.slice(i), ...path.slice(0, i)]);
   return variants.sort((a, b) => a.join('>').localeCompare(b.join('>')))[0];
 }
 

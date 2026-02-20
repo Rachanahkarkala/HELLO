@@ -1,118 +1,199 @@
 :root {
-  --bg: #0f172a;
-  --card: #111827;
-  --text: #e5e7eb;
+  --bg: #070b16;
+  --panel: rgba(13, 19, 35, 0.72);
+  --stroke: rgba(148, 163, 184, 0.24);
+  --text: #e2e8f0;
   --muted: #94a3b8;
-  --accent: #22c55e;
+  --accent: #22d3ee;
+  --accent2: #818cf8;
+  --success: #22c55e;
   --danger: #ef4444;
-  --warn: #f59e0b;
 }
 
-* {
-  box-sizing: border-box;
-  font-family: Inter, system-ui, -apple-system, sans-serif;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
   color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 10%, #16203f 0%, #0b1020 35%, #05070e 100%);
+  overflow-x: hidden;
 }
 
-header {
-  padding: 1.5rem;
+.bg-glow {
+  position: fixed;
+  width: 340px;
+  height: 340px;
+  border-radius: 999px;
+  filter: blur(70px);
+  opacity: 0.22;
+  z-index: -1;
+  animation: drift 18s ease-in-out infinite alternate;
+}
+
+.bg-glow-1 { background: #22d3ee; top: -80px; left: -70px; }
+.bg-glow-2 { background: #6366f1; bottom: -120px; right: -80px; animation-delay: 2s; }
+
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(30px, -15px) scale(1.1); }
+}
+
+.hero {
+  padding: 2.2rem 1.2rem 1rem;
   text-align: center;
-  border-bottom: 1px solid #334155;
+}
+
+.kicker {
+  text-transform: uppercase;
+  letter-spacing: .13em;
+  color: var(--accent);
+  font-size: 0.72rem;
+  margin: 0;
 }
 
 h1 {
-  margin: 0;
-  color: var(--accent);
+  margin: 0.4rem 0 0;
+  font-size: clamp(2rem, 5vw, 3.3rem);
+  background: linear-gradient(100deg, #e0f2fe 0%, #67e8f9 45%, #a5b4fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
+.subtitle { color: var(--muted); margin: 0.4rem auto 0; max-width: 760px; }
+
 main {
-  max-width: 1200px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 0 1rem 2rem;
   display: grid;
   gap: 1rem;
 }
 
-.upload-card,
-.panel {
-  background: rgba(17, 24, 39, 0.85);
-  border: 1px solid #334155;
-  border-radius: 12px;
-  padding: 1rem;
+.glass {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
 }
 
+.upload-card, .panel { padding: 1rem; }
+
+.upload-header { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.upload-header p { color: var(--muted); margin-top: .35rem; }
+
+.file-badge {
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  color: #a5f3fc;
+  padding: .35rem .7rem;
+  border-radius: 999px;
+  font-size: .8rem;
+  white-space: nowrap;
+}
+
+.upload-actions {
+  margin-top: .75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  align-items: center;
+}
+
+.file-input-wrap,
 button {
-  background: #1d4ed8;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 0.6rem 1rem;
-  margin-left: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  background: rgba(15, 23, 42, 0.72);
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: .62rem .95rem;
   cursor: pointer;
+  transition: transform .18s ease, border-color .18s ease, background .2s ease;
+}
+
+#csvInput { display: none; }
+
+button:hover,
+.file-input-wrap:hover {
+  transform: translateY(-1px);
+  border-color: rgba(99, 102, 241, 0.8);
+  background: rgba(30, 41, 59, 0.9);
 }
 
 button:disabled {
-  opacity: 0.4;
+  opacity: .45;
   cursor: not-allowed;
+  transform: none;
 }
 
-#status {
-  margin-top: 0.75rem;
-  color: var(--muted);
+.status {
+  margin-top: .75rem;
+  color: #93c5fd;
+  min-height: 1.2rem;
+  transition: color .2s ease;
 }
 
-.results-grid {
+.stats-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .8rem;
 }
+
+.stat-card {
+  padding: .9rem 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::after {
+  content: "";
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  right: -50px;
+  top: -60px;
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.35), transparent 65%);
+}
+
+.stat-card p { margin: 0; color: var(--muted); font-size: .82rem; }
+.stat-card h3 { margin: .15rem 0 0; font-size: 1.7rem; }
+
+.results-grid { display: grid; grid-template-columns: 1.75fr 1fr; gap: 1rem; }
 
 #graph {
   width: 100%;
-  height: 460px;
-  border-radius: 8px;
-  background: #020617;
-  border: 1px solid #334155;
+  height: 500px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  background: radial-gradient(circle at 20% 10%, #0f1b37 0%, #070d1d 68%);
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid rgba(148, 163, 184, .16); padding: .5rem; font-size: .82rem; text-align: left; }
+th { color: #bfdbfe; position: sticky; top: 0; background: rgba(8, 12, 24, 0.95); }
 
-th,
-td {
-  border-bottom: 1px solid #334155;
-  padding: 0.5rem;
-  text-align: left;
-  font-size: 0.85rem;
-}
+.table-wrapper { max-height: 490px; overflow: auto; border-radius: 12px; }
 
-.table-wrapper {
-  max-height: 450px;
-  overflow: auto;
-}
-
-#suspiciousList {
-  margin: 0;
-  padding-left: 1rem;
-}
-
+#suspiciousList { margin: 0; padding-left: 1.1rem; }
 #suspiciousList li {
-  margin-bottom: 0.35rem;
+  margin-bottom: .35rem;
+  color: #e2e8f0;
+  animation: rise .24s ease both;
 }
 
-@media (max-width: 900px) {
-  .results-grid {
-    grid-template-columns: 1fr;
-  }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-  button {
-    margin: 0.5rem 0.5rem 0 0;
-  }
+@media (max-width: 1040px) {
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .results-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 700px) {
+  .upload-header { flex-direction: column; }
+  .stats-grid { grid-template-columns: 1fr; }
+  #graph { height: 400px; }
 }

@@ -4,6 +4,7 @@ MuleSight is a graph-based financial forensics web app for detecting money mulin
 
 ## Features
 - CSV upload with required schema validation.
+- Premium glassmorphism dashboard with animated metric cards and polished interaction states.
 - Directed graph visualization of account-to-account money flow.
 - Automatic detection of:
   - Circular routing cycles (length 3-5)
