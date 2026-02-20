@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MuleSight</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://unpkg.com/vis-network@9.1.9/dist/vis-network.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>MuleSight</h1>
+    <p>Graph-Based Financial Crime Detection Engine for Money Muling Networks</p>
+  </header>
+
+  <main>
+    <section class="upload-card">
+      <h2>Upload Transaction CSV</h2>
+      <p>Required columns: transaction_id, sender_id, receiver_id, amount, timestamp (YYYY-MM-DD HH:MM:SS)</p>
+      <input type="file" id="csvInput" accept=".csv" />
+      <button id="analyzeBtn" disabled>Analyze Transactions</button>
+      <button id="downloadJsonBtn" disabled>Download JSON Output</button>
+      <div id="status"></div>
+    </section>
+
+    <section class="results-grid">
+      <article class="panel">
+        <h3>Interactive Account Graph</h3>
+        <div id="graph"></div>
+      </article>
+
+      <article class="panel">
+        <h3>Fraud Ring Summary</h3>
+        <div class="table-wrapper">
+          <table id="ringTable">
+            <thead>
+              <tr>
+                <th>Ring ID</th>
+                <th>Pattern Type</th>
+                <th>Member Count</th>
+                <th>Risk Score</th>
+                <th>Member Account IDs</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h3>Suspicious Account Leaderboard</h3>
+      <ul id="suspiciousList"></ul>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
